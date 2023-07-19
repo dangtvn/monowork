@@ -3,6 +3,7 @@ import {
   Moon,
   SunMedium,
   Twitter,
+  Loader2,
   type Icon as LucideIcon,
 } from "lucide-react"
 
@@ -28,4 +29,5 @@ export const Icons = {
       ></path>
     </svg>
   ),
+  loader2: Loader2
 }
