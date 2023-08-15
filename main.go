@@ -1,11 +1,11 @@
 package main
 
 import (
+	"go.uber.org/zap"
 	"html/template"
 	"io"
+	"monowork/monowork"
 	"net/http"
-
-	"github.com/gordonklaus/portaudio"
 
 	"github.com/labstack/echo/v4"
 )
@@ -35,23 +35,13 @@ func main() {
 
 	e.Renderer = renderer
 
-	portaudio.Initialize()
-	defer portaudio.Terminate()
-	buffer := make([]float32, sampleRate*seconds)
-	stream, err := portaudio.OpenDefaultStream(1, 0, sampleRate, len(buffer), func(in []float32) {
-		for i := range buffer {
-			buffer[i] = in[i]
-		}
-	})
-	if err != nil {
-		panic(err)
-	}
-	stream.Start()
-	defer stream.Close()
-
 	e.GET("/", func(c echo.Context) error {
 		return c.Render(http.StatusOK, "index.html", map[string]interface{}{})
 	}).Name = "index"
+
+	reader := monowork.NewReader()
+	logger, _ := zap.NewProduction()
+	ws := monowork.NewWebSocket(reader, &logger)
 
 	// e.GET("/stream", func(c echo.Context) error {
 	// 	c.Response().Header().Set("Connection", "Keep-Alive")
