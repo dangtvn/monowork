@@ -1,44 +1,34 @@
-<script lang="ts">
-  import bg from './assets/darius-anton-coffee-01.gif';
+<script>
+  let audioContext = new AudioContext();
+  let audioBuffer = null;
+  let audioSource = null;
 
-  let currentSong = 'Loading...';
+  let ws = new WebSocket('ws://localhost:4444/stream.mp3');
+
+  ws.binaryType = 'arraybuffer';
+
+  ws.onmessage = function(event) {
+    // Create an audio buffer from the received ArrayBuffer
+    audioContext.decodeAudioData(event.data, function(buffer) {
+      audioBuffer = buffer;
+    });
+  };
+
+  function playMusic() {
+    // Create a new AudioBufferSourceNode and connect it to the AudioContext
+    audioSource = audioContext.createBufferSource();
+    audioSource.buffer = audioBuffer;
+    audioSource.connect(audioContext.destination);
+
+    // Start playing the audio buffer
+    audioSource.start();
+  }
+
+  function stopMusic() {
+    // Stop playing the audio buffer
+    audioSource.stop();
+  }
 </script>
 
-<div class="container">
-  <div class="background" style="background-image: url({bg});" />
-  <!-- <div class="overlay" style="background-image: url({overlay});"></div> -->
-  <!-- <div class="song-name">{{ currentSong }}</div> -->
-  <div class="song-name">[Click on the screen to play]</div>
-</div>
-
-<style>
-  .container {
-    width: 100%;
-    height: 100%;
-    position: relative;
-  }
-
-  .background {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    background: transparent no-repeat center center;
-    background-size: cover;
-  }
-
-  .background {
-    opacity: 0.25;
-    z-index: 1;
-  }
-
-  .song-name {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    color: #fff;
-    text-shadow: 0 0 7px #fff, 0 0 10px #fff, 0 0 21px #fff, 0 0 42px #0fa,
-      0 0 82px #0fa, 0 0 92px #0fa, 0 0 102px #0fa, 0 0 151px #0fa;
-    font-family: monospace;
-    font-size: 16px;
-  }
-</style>
+<button on:click={playMusic}>Play Music</button>
+<button on:click={stopMusic}>Stop Music</button>

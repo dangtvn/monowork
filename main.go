@@ -1,56 +1,58 @@
 package main
 
 import (
-	"go.uber.org/zap"
-	"html/template"
-	"io"
-	"monowork/monowork"
+	"encoding/json"
+	"log"
+	"monowork/internal"
 	"net/http"
+	"os"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
-const sampleRate = 44100
-const seconds = 1
-
-type TemplateRenderer struct {
-	templates *template.Template
-}
-
-func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	if viewContext, isMap := data.(map[string]interface{}); isMap {
-		viewContext["reverse"] = c.Echo().Reverse
-	}
-
-	return t.templates.ExecuteTemplate(w, name, data)
-}
-
 func main() {
-	e := echo.New()
-	e.Static("/assets", "www/dist/assets")
+	router := mux.NewRouter()
+	var ServerPort = os.Getenv("PORT")
 
-	renderer := &TemplateRenderer{
-		templates: template.Must(template.ParseGlob("www/dist/*.html")),
+	if ServerPort == "" {
+		ServerPort = "4444"
 	}
 
-	e.Renderer = renderer
+	go internal.MusicStation.Run()
 
-	e.GET("/", func(c echo.Context) error {
-		return c.Render(http.StatusOK, "index.html", map[string]interface{}{})
-	}).Name = "index"
+	router.HandleFunc("/new-playing", currentTrackHandler)
+	router.HandleFunc("/stream.mp3", streamHandler)
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./www/dist/")))
 
-	reader := monowork.NewReader()
-	logger, _ := zap.NewProduction()
-	ws := monowork.NewWebSocket(reader, &logger)
+	log.Printf("The server is streaming on http://localhost:%s", ServerPort)
+	log.Fatal(http.ListenAndServe(":"+ServerPort, router), nil)
+}
 
-	// e.GET("/stream", func(c echo.Context) error {
-	// 	c.Response().Header().Set("Connection", "Keep-Alive")
-	// 	c.Response().Header().Set("Transfer-Encoding", "chunked")
-	// 	for true {
-	// 		binary.Write(c.Response().Writer, binary.BigEndian, &buffer)
-	// 		flusher.Flush() // Trigger "chunked" encoding
-	// 		return
-	// 	}
-	// }).Name = "index"
-	e.Logger.Fatal(e.Start(":8000"))
+func currentTrackHandler(w http.ResponseWriter, r *http.Request) {
+	trackInfo, _ := internal.MusicStation.TrackInfo()
+	resp, _ := json.Marshal(trackInfo.Duration())
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(resp)
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func streamHandler(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	client := internal.NewClient(ws)
+	internal.MusicStation.Register(client)
+	go client.ReadPump()
+	client.WritePump()
 }
